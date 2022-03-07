@@ -1,4 +1,4 @@
-package data_structures.sets;
+package datastructures.sets;
 
 import java.util.Map;
 import java.util.Set;
