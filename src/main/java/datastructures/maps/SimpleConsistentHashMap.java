@@ -14,7 +14,7 @@ public class SimpleConsistentHashMap<Key, Value> implements Map<Key, Value> {
     private final int nodeCount;
     private final BigDecimal[] inclusiveNodeStartAngles;
     private final Function<Key, Long> hashFunction;
-    private final Map<Integer, Map<Key, Value>> entriesByAngleIndex;
+    private final Map<BigDecimal, Map<Key, Value>> entriesByStartingAngle;
 
     public SimpleConsistentHashMap(
             final int nodeCount,
@@ -37,7 +37,7 @@ public class SimpleConsistentHashMap<Key, Value> implements Map<Key, Value> {
                 )
                 .toArray(BigDecimal[]::new);
 
-        entriesByAngleIndex = new HashMap<>(nodeCount);
+        entriesByStartingAngle = new HashMap<>(nodeCount);
     }
 
     @Override
@@ -55,8 +55,12 @@ public class SimpleConsistentHashMap<Key, Value> implements Map<Key, Value> {
         if (null == o) {
             throw new NullPointerException("Cannot get value for null key");
         }
+
         final Key key = (Key) o;
-        return Optional.ofNullable(entriesByAngleIndex.get(calculateKeyIndexForKey(key)))
+
+        return Optional.ofNullable(
+                        entriesByStartingAngle.get(calculateNodeAngleForKey(key))
+                )
                 .map(v -> v.containsKey(key))
                 .orElse(Boolean.FALSE);
     }
@@ -71,10 +75,12 @@ public class SimpleConsistentHashMap<Key, Value> implements Map<Key, Value> {
         if (null == obj) {
             throw new NullPointerException("Cannot get value for null key");
         }
+
         final Key key = (Key) obj;
 
-        final Map<Key, Value> nodeMapping = entriesByAngleIndex.get(calculateKeyIndexForKey(key));
-        return Optional.ofNullable(nodeMapping)
+        return Optional.ofNullable(
+                        entriesByStartingAngle.get(calculateNodeAngleForKey(key))
+                )
                 .flatMap(v -> Optional.ofNullable(v.get(key)))
                 .orElse(null);
     }
@@ -85,9 +91,9 @@ public class SimpleConsistentHashMap<Key, Value> implements Map<Key, Value> {
             throw new NullPointerException("Key cannot be null");
         }
 
-        final Value insertionValue = entriesByAngleIndex
+        final Value insertionValue = entriesByStartingAngle
                 .computeIfAbsent(
-                        calculateKeyIndexForKey(key),
+                        calculateNodeAngleForKey(key),
                         (v) -> new HashMap<>()
                 )
                 .put(key, value);
@@ -108,7 +114,7 @@ public class SimpleConsistentHashMap<Key, Value> implements Map<Key, Value> {
         final Key key = (Key) o;
 
         return Optional.ofNullable(
-                        entriesByAngleIndex.get(calculateKeyIndexForKey(key))
+                        entriesByStartingAngle.get(calculateNodeAngleForKey(key))
                 )
                 .flatMap(entries -> Optional.ofNullable(entries.remove(key)))
                 .orElse(null);
@@ -139,10 +145,12 @@ public class SimpleConsistentHashMap<Key, Value> implements Map<Key, Value> {
         throw new UnsupportedOperationException();
     }
 
-    private int calculateKeyIndexForKey(final Key key) {
-        final BigDecimal angle = calculateAngleForKeyAndHashFunction(key, hashFunction);
-        final int insertionIndex = Arrays.binarySearch(inclusiveNodeStartAngles, angle);
-        return insertionIndex % nodeCount;
+    private BigDecimal calculateNodeAngleForKey(final Key key) {
+        final int insertionIndex = Arrays.binarySearch(
+                inclusiveNodeStartAngles,
+                BigDecimal.valueOf(hashFunction.apply(key) % DEGREES_IN_CIRCLE)
+        );
+        return inclusiveNodeStartAngles[insertionIndex % nodeCount];
     }
 
     private static BigDecimal calculateRandomAngle() {
@@ -154,12 +162,5 @@ public class SimpleConsistentHashMap<Key, Value> implements Map<Key, Value> {
                                                 .subtract(SimpleConsistentHashMap.MINIMUM_ANGLE)
                                 )
                 );
-    }
-
-    private static <Key> BigDecimal calculateAngleForKeyAndHashFunction(
-            final Key key,
-            final Function<Key, Long> hashFunction
-    ) {
-        return BigDecimal.valueOf(hashFunction.apply(key) % DEGREES_IN_CIRCLE);
     }
 }
