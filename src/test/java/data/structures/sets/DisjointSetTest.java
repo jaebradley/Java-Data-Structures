@@ -1,4 +1,4 @@
-package datastructures.sets;
+package data.structures.sets;
 
 import org.junit.Assert;
 import org.junit.Test;

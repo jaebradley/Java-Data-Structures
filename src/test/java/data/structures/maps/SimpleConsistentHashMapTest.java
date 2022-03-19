@@ -1,4 +1,4 @@
-package datastructures.maps;
+package data.structures.maps;
 
 import junit.framework.TestCase;
 import org.junit.Assert;
