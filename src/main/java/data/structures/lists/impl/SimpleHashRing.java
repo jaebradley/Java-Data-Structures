@@ -40,20 +40,20 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
         }
     }
 
-    private final List<Position> nodeLocations;
-    private final Map<Position, Map<Key, Value>> entriesByLocation;
+    private final List<Position> nodePositions;
+    private final Map<Position, Map<Key, Value>> entriesByPosition;
     private final Function<Key, Position> hashFunction;
 
-    public SimpleHashRing(final Set<Position> nodeLocations, final Function<Key, Position> hashFunction) throws AtLeastOneNodeMustExist {
-        if (nodeLocations.isEmpty()) {
+    public SimpleHashRing(final Set<Position> nodePositions, final Function<Key, Position> hashFunction) throws AtLeastOneNodeMustExist {
+        if (nodePositions.isEmpty()) {
             throw new AtLeastOneNodeMustExist();
         }
 
-        this.nodeLocations = nodeLocations
+        this.nodePositions = nodePositions
                 .stream()
                 .sorted(Comparator.comparingInt(v -> v.value))
                 .collect(Collectors.toList());
-        this.entriesByLocation = nodeLocations
+        this.entriesByPosition = nodePositions
                 .stream()
                 .collect(
                         Collectors.toMap(
@@ -65,18 +65,19 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
     }
 
     @Override
-    public void addNode(Position location) {
-        final Map<Key, Value> entries = entriesByLocation.putIfAbsent(location, new HashMap<>());
-        if (null == entries) {
-            int indexOfFirstElementGreaterThanLocation = Math.abs(Collections.binarySearch(nodeLocations, location)) - 1;
-            int insertionIndex = Math.max(indexOfFirstElementGreaterThanLocation - 1, 0);
-            nodeLocations.add(insertionIndex, location);
-            final Map<Key, Value> nextIndexEntries = entriesByLocation.get(nodeLocations.get(indexOfFirstElementGreaterThanLocation));
-            final Map<Key, Value> newNodeEntries = nextIndexEntries
+    public void addNode(final Position position) {
+        final Map<Key, Value> positionEntries = entriesByPosition.putIfAbsent(position, new HashMap<>());
+        if (null == positionEntries) {
+            final int followingNodeLocation = Math.abs(Collections.binarySearch(nodePositions, position) + 1);
+            final int currentNodeIndex = Math.max(followingNodeLocation, 0);
+            nodePositions.add(currentNodeIndex, position);
+
+            final Map<Key, Value> followingNodeEntries = entriesByPosition.get(nodePositions.get(followingNodeLocation));
+            final Map<Key, Value> currentNodeEntries = followingNodeEntries
                     .entrySet()
                     .stream()
                     .filter(
-                            e -> 0 > this.hashFunction.apply(e.getKey()).compareTo(location)
+                            e -> 0 > this.hashFunction.apply(e.getKey()).compareTo(position)
                     )
                     .collect(
                             Collectors.toMap(
@@ -84,21 +85,22 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
                                     Map.Entry::getValue
                             )
                     );
-            entriesByLocation.put(location, newNodeEntries);
-            nextIndexEntries.keySet().removeAll(newNodeEntries.keySet());
+            entriesByPosition.put(position, currentNodeEntries);
+            followingNodeEntries.keySet().removeAll(currentNodeEntries.keySet());
         }
     }
 
     @Override
-    public void removeNode(Position location) throws AtLeastOneNodeMustExist {
-        final Map<Key, Value> entries = entriesByLocation.get(location);
+    public void removeNode(final Position position) throws AtLeastOneNodeMustExist {
+        final Map<Key, Value> entries = entriesByPosition.get(position);
         if (null != entries) {
-            if (1 < entriesByLocation.size()) {
-                final int index = Collections.binarySearch(nodeLocations, location);
-                final int nextNodeIndex = (index + 1) % nodeLocations.size();
-                this.entriesByLocation.get(this.nodeLocations.get(nextNodeIndex)).putAll(entries);
-                entriesByLocation.remove(location);
-                nodeLocations.remove(index);
+            if (1 < entriesByPosition.size()) {
+                final int currentNodeIndex = Collections.binarySearch(nodePositions, position);
+                final int followingNodeIndex = (currentNodeIndex + 1) % nodePositions.size();
+                this.entriesByPosition.get(this.nodePositions.get(followingNodeIndex)).putAll(entries);
+                entriesByPosition.remove(position);
+                nodePositions.remove(currentNodeIndex);
+                return;
             }
 
             throw new AtLeastOneNodeMustExist();
@@ -123,8 +125,8 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
 
     private Optional<Map<Key, Value>> getEntriesForKey(final Key key) {
         return Optional.ofNullable(
-                entriesByLocation.get(
-                        nodeLocations.get(calculateNodeLocationForKey(key))
+                entriesByPosition.get(
+                        nodePositions.get(calculateNodeLocationForKey(key))
                 )
         );
     }
@@ -132,7 +134,7 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
     private int calculateNodeLocationForKey(final Key key) {
         final int nodeLocationIndex;
         {
-            final int searchedIndex = Collections.binarySearch(nodeLocations, hashFunction.apply(key));
+            final int searchedIndex = Collections.binarySearch(nodePositions, hashFunction.apply(key));
             if (0 > searchedIndex) {
                 nodeLocationIndex = Math.abs(searchedIndex) - 1;
             } else {
@@ -140,6 +142,6 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
             }
         }
 
-        return nodeLocationIndex % nodeLocations.size();
+        return nodeLocationIndex % nodePositions.size();
     }
 }

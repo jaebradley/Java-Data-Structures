@@ -36,5 +36,18 @@ public class SimpleHashRingTest extends TestCase {
         Assert.assertEquals(Optional.of(Integer.MAX_VALUE), hashRing.getValue(Integer.MAX_VALUE));
         Assert.assertEquals(Optional.empty(), hashRing.getValue(1));
 
+        try {
+            hashRing.removeNode(new SimpleHashRing.Position(0));
+            hashRing.removeNode(new SimpleHashRing.Position(1));
+        } catch (HashRing.AtLeastOneNodeMustExist e) {
+            throw new RuntimeException("unexpected", e);
+        }
+
+        try {
+            hashRing.removeNode(new SimpleHashRing.Position(Integer.MAX_VALUE));
+            throw new RuntimeException("unexpected");
+        } catch (HashRing.AtLeastOneNodeMustExist e) {
+            // expected
+        }
     }
 }

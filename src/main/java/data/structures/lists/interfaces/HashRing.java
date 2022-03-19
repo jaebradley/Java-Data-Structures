@@ -8,9 +8,9 @@ public interface HashRing<Key, Value> {
     class AtLeastOneNodeMustExist extends Exception {
     }
 
-    void addNode(SimpleHashRing.Position location);
+    void addNode(SimpleHashRing.Position position);
 
-    void removeNode(SimpleHashRing.Position location) throws AtLeastOneNodeMustExist;
+    void removeNode(SimpleHashRing.Position position) throws AtLeastOneNodeMustExist;
 
     Optional<Value> addEntry(Key key, Value value);
 
