@@ -12,7 +12,7 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
 
         public Position(int value) {
             if (0 > value) {
-                throw new IllegalArgumentException("value must be positive");
+                throw new IllegalArgumentException("value must be non-negative");
             }
             this.value = value;
         }
@@ -37,37 +37,6 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
         @Override
         public int compareTo(Position o) {
             return Integer.compare(this.value, o.value);
-        }
-    }
-
-    static class Node<Key, Value> {
-        private final Position location;
-        private final Map<Key, Value> entries;
-
-        public Node(final Position location, final Map<Key, Value> entries) {
-            this.location = location;
-            this.entries = entries;
-        }
-
-        public Position getLocation() {
-            return location;
-        }
-
-        public Map<Key, Value> getEntries() {
-            return entries;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Node<?, ?> node = (Node<?, ?>) o;
-            return Objects.equals(location, node.location) && Objects.equals(entries, node.entries);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(location, entries);
         }
     }
 
@@ -96,13 +65,13 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
     }
 
     @Override
-    public void addNode(Position location) throws NodeAlreadyExists {
+    public void addNode(Position location) {
         final Map<Key, Value> entries = entriesByLocation.putIfAbsent(location, new HashMap<>());
         if (null == entries) {
-            int indexOfFirstElementGreaterThanLocation = Collections.binarySearch(nodeLocations, location);
-            int insertionIndex = Math.min(indexOfFirstElementGreaterThanLocation - 1, 0);
+            int indexOfFirstElementGreaterThanLocation = Math.abs(Collections.binarySearch(nodeLocations, location)) - 1;
+            int insertionIndex = Math.max(indexOfFirstElementGreaterThanLocation - 1, 0);
             nodeLocations.add(insertionIndex, location);
-            final Map<Key, Value> nextIndexEntries = entriesByLocation.get(new Position(indexOfFirstElementGreaterThanLocation));
+            final Map<Key, Value> nextIndexEntries = entriesByLocation.get(nodeLocations.get(indexOfFirstElementGreaterThanLocation));
             final Map<Key, Value> newNodeEntries = nextIndexEntries
                     .entrySet()
                     .stream()
@@ -118,9 +87,6 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
             entriesByLocation.put(location, newNodeEntries);
             nextIndexEntries.keySet().removeAll(newNodeEntries.keySet());
         }
-        throw new NodeAlreadyExists();
-
-
     }
 
     @Override
@@ -142,48 +108,38 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
 
     @Override
     public Optional<Value> addEntry(final Key key, final Value value) {
-        return Optional.ofNullable(
-                        entriesByLocation
-                                .get(
-                                        nodeLocations.get(
-                                                Collections.binarySearch(nodeLocations, hashFunction.apply(key)) % nodeLocations.size()
-                                        )
-                                )
-                )
-                .map(entries -> entries.put(key, value));
+        return getEntriesForKey(key).map(entries -> entries.put(key, value));
     }
 
     @Override
-    public Value removeEntry(final Key key) throws EntryDoesNotExist {
-        final Map<Key, Value> entries = entriesByLocation
-                .get(
-                        nodeLocations.get(
-                                Collections.binarySearch(nodeLocations, hashFunction.apply(key)) % nodeLocations.size()
-                        )
-                );
-        if (null == entries) {
-            throw new EntryDoesNotExist();
-        }
-
-        final Value value = entries.remove(key);
-
-        if (null == value) {
-            throw new EntryDoesNotExist();
-        }
-
-        return value;
+    public Optional<Value> removeEntry(final Key key) {
+        return getEntriesForKey(key).map(entries -> entries.remove(key));
     }
 
     @Override
     public Optional<Value> getValue(final Key key) {
+        return getEntriesForKey(key).map(entries -> entries.get(key));
+    }
+
+    private Optional<Map<Key, Value>> getEntriesForKey(final Key key) {
         return Optional.ofNullable(
-                entriesByLocation
-                        .get(
-                                nodeLocations.get(
-                                        Collections.binarySearch(nodeLocations, hashFunction.apply(key)) % nodeLocations.size()
-                                )
-                        )
-                        .get(key)
+                entriesByLocation.get(
+                        nodeLocations.get(calculateNodeLocationForKey(key))
+                )
         );
+    }
+
+    private int calculateNodeLocationForKey(final Key key) {
+        final int nodeLocationIndex;
+        {
+            final int searchedIndex = Collections.binarySearch(nodeLocations, hashFunction.apply(key));
+            if (0 > searchedIndex) {
+                nodeLocationIndex = Math.abs(searchedIndex) - 1;
+            } else {
+                nodeLocationIndex = searchedIndex;
+            }
+        }
+
+        return nodeLocationIndex % nodeLocations.size();
     }
 }
