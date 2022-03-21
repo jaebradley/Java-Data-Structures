@@ -29,6 +29,7 @@ public class SimpleHashRingTest extends TestCase {
         hashRing.addNode(new SimpleHashRing.Position(0));
         hashRing.addNode(new SimpleHashRing.Position(1));
         hashRing.addNode(new SimpleHashRing.Position(Integer.MAX_VALUE));
+        hashRing.addNode(new SimpleHashRing.Position(Integer.MAX_VALUE - 1));
         hashRing.addEntry(Integer.MAX_VALUE, Integer.MAX_VALUE);
         hashRing.addEntry(0, 0);
 
@@ -39,6 +40,7 @@ public class SimpleHashRingTest extends TestCase {
         try {
             hashRing.removeNode(new SimpleHashRing.Position(0));
             hashRing.removeNode(new SimpleHashRing.Position(1));
+            hashRing.removeNode(new SimpleHashRing.Position(Integer.MAX_VALUE - 1));
         } catch (HashRing.AtLeastOneNodeMustExist e) {
             throw new RuntimeException("unexpected", e);
         }

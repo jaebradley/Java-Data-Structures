@@ -7,51 +7,18 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
-    public static class Position implements Comparable<Position> {
-        private final int value;
-
-        public Position(int value) {
-            if (0 > value) {
-                throw new IllegalArgumentException("value must be non-negative");
-            }
-            this.value = value;
-        }
-
-        public int getValue() {
-            return value;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Position position = (Position) o;
-            return value == position.value;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(value);
-        }
-
-        @Override
-        public int compareTo(Position o) {
-            return Integer.compare(this.value, o.value);
-        }
-    }
-
     private final List<Position> nodePositions;
     private final Map<Position, Map<Key, Value>> entriesByPosition;
-    private final Function<Key, Position> hashFunction;
+    private final Function<Key, Position> keyToPositionCalculator;
 
-    public SimpleHashRing(final Set<Position> nodePositions, final Function<Key, Position> hashFunction) throws AtLeastOneNodeMustExist {
+    public SimpleHashRing(final Set<Position> nodePositions, final Function<Key, Position> keyToPositionCalculator) throws AtLeastOneNodeMustExist {
         if (nodePositions.isEmpty()) {
             throw new AtLeastOneNodeMustExist();
         }
 
         this.nodePositions = nodePositions
                 .stream()
-                .sorted(Comparator.comparingInt(v -> v.value))
+                .sorted(Comparator.comparingInt(Position::getValue))
                 .collect(Collectors.toList());
         this.entriesByPosition = nodePositions
                 .stream()
@@ -61,23 +28,23 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
                                 (v) -> new HashMap<>()
                         )
                 );
-        this.hashFunction = hashFunction;
+        this.keyToPositionCalculator = keyToPositionCalculator;
     }
 
     @Override
     public void addNode(final Position position) {
         final Map<Key, Value> positionEntries = entriesByPosition.putIfAbsent(position, new HashMap<>());
         if (null == positionEntries) {
-            final int followingNodeLocation = Math.abs(Collections.binarySearch(nodePositions, position) + 1);
-            final int currentNodeIndex = Math.max(followingNodeLocation, 0);
+            final int followingNodePosition = Math.abs(Collections.binarySearch(nodePositions, position) + 1);
+            final int currentNodeIndex = Math.max(followingNodePosition, 0);
             nodePositions.add(currentNodeIndex, position);
 
-            final Map<Key, Value> followingNodeEntries = entriesByPosition.get(nodePositions.get(followingNodeLocation));
+            final Map<Key, Value> followingNodeEntries = entriesByPosition.get(nodePositions.get(followingNodePosition));
             final Map<Key, Value> currentNodeEntries = followingNodeEntries
                     .entrySet()
                     .stream()
                     .filter(
-                            e -> 0 > this.hashFunction.apply(e.getKey()).compareTo(position)
+                            e -> 0 > this.keyToPositionCalculator.apply(e.getKey()).compareTo(position)
                     )
                     .collect(
                             Collectors.toMap(
@@ -126,22 +93,22 @@ public class SimpleHashRing<Key, Value> implements HashRing<Key, Value> {
     private Optional<Map<Key, Value>> getEntriesForKey(final Key key) {
         return Optional.ofNullable(
                 entriesByPosition.get(
-                        nodePositions.get(calculateNodeLocationForKey(key))
+                        nodePositions.get(calculateNodePositionForKey(key))
                 )
         );
     }
 
-    private int calculateNodeLocationForKey(final Key key) {
-        final int nodeLocationIndex;
+    private int calculateNodePositionForKey(final Key key) {
+        final int nodePositionIndex;
         {
-            final int searchedIndex = Collections.binarySearch(nodePositions, hashFunction.apply(key));
+            final int searchedIndex = Collections.binarySearch(nodePositions, keyToPositionCalculator.apply(key));
             if (0 > searchedIndex) {
-                nodeLocationIndex = Math.abs(searchedIndex) - 1;
+                nodePositionIndex = Math.abs(searchedIndex) - 1;
             } else {
-                nodeLocationIndex = searchedIndex;
+                nodePositionIndex = searchedIndex;
             }
         }
 
-        return nodeLocationIndex % nodePositions.size();
+        return nodePositionIndex % nodePositions.size();
     }
 }
